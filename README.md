@@ -57,3 +57,16 @@ The PMSM model itself is based on the following fundamental d-q frame equations.
     * $T_{e} = J\frac{d\omega_{m}}{dt} + B\omega_{m} + T_{L}$
 
 This visual guide should provide a clear blueprint for understanding and building this SVPWM-DTC control system in Simulink.
+
+
+![Results_1a](Images/7b.png)
+
+![Results_1b](Images/8b.png)
+
+![Results_1c](Images/9b.png)
+
+![Results_2a](Images/10b.png)
+
+![Results_2b](Images/11b.png)
+
+![Results_2c](Images/12b.png)
