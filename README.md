@@ -14,50 +14,34 @@ The complete control scheme integrates feedback loops for speed, torque, and flu
 
 ---
 
+
 ## How It Works
 
-The control system operates by continuously estimating the motor state and adjusting the inverter voltage vectors. The major steps are:
+The control system operates by continuously estimating the motor state and adjusting inverter voltage vectors.
 
 1. **Sensing & Transformation**
-   The three-phase stator currents and voltages are transformed into the two-phase stationary (`α-β`) frame using the **Clarke Transformation**:
+   The three-phase stator currents and voltages are transformed into the two-phase stationary (α-β) frame using the **Clarke Transformation**. For a balanced system ((i_a + i_b + i_c = 0)), the power-invariant form is:
 
-   [
+   $$
    \begin{aligned}
-   i_{\alpha} &= i_{a} \
-   i_{\beta} &= \frac{1}{\sqrt{3}}(i_{a} + 2i_{b})
+   i_{\alpha} &= i_{a},[4pt]
+   i_{\beta}  &= \tfrac{1}{\sqrt{3}},(i_{a} + 2,i_{b}).
    \end{aligned}
-   ]
+   $$
 
-   (with ( i_{a} + i_{b} + i_{c} = 0 ) for a balanced system).
-   Similar transformations apply for voltages.
-
-2. **Estimation**
-
-   * The **flux estimator** and **torque estimator** compute real-time values of stator flux and electromagnetic torque.
-   * The **ADO-SMO** provides sensorless estimation of **rotor speed** and **electrical angle**, eliminating the need for a mechanical encoder.
-
-3. **Control Loops**
-
-   * The **speed error** (reference − estimated) passes through a PI controller to generate reference torque.
-   * The **torque and flux errors** are processed through PI regulators to generate reference voltages in the d-q frame.
-
-4. **Pulse Generation**
-   An SVPWM block converts the reference voltages into optimized gate pulses for the inverter, ensuring a constant switching frequency and efficient operation.
+   (A full 3×3 Clarke matrix is used if zero-sequence needs to be preserved.)
 
 ---
-
-## System Components Breakdown
 
 ### Flux Estimator
 
 Calculates the stator flux linkage:
 
-[
-\Psi_{d} = L_{d} i_{d} + \Psi_{m}, \quad \Psi_{q} = L_{q} i_{q}, \quad
+$$
+\Psi_{d} = L_{d} i_{d} + \Psi_{m}, \qquad
+\Psi_{q} = L_{q} i_{q}, \qquad
 \Psi_{T} = \sqrt{\Psi_{d}^{2} + \Psi_{q}^{2}}
-]
-
-![Flux Estimator](Images/02_flux_estimator.png)
+$$
 
 ---
 
@@ -65,91 +49,97 @@ Calculates the stator flux linkage:
 
 Computes the electromagnetic torque:
 
-[
+$$
 T_{e} = p \big(\Psi_{m} i_{q} + (L_{d} - L_{q}) i_{d} i_{q}\big)
-]
-
-![Torque Estimator](Images/03_torque_estimator.png)
+$$
 
 ---
 
-### ADO-SMO: Speed and Angle Observer
+### ADO-SMO (Speed & Angle Observer)
 
-The **Adaptive Disturbance Observer–based Sliding Mode Observer (ADO-SMO)** is used for sensorless estimation of rotor position and speed.
-It reconstructs back-EMF and adapts to parameter variations or disturbances.
+We model the stator currents (α-β frame) as:
 
-**Observer equations:**
-
-[
+$$
 \begin{aligned}
-\frac{di_{\alpha}}{dt} &= -\frac{R_{s}}{L_{s}} i_{\alpha} + \frac{1}{L_{s}} v_{\alpha} - \frac{1}{L_{s}} e_{\alpha} \
-\frac{di_{\beta}}{dt} &= -\frac{R_{s}}{L_{s}} i_{\beta} + \frac{1}{L_{s}} v_{\beta} - \frac{1}{L_{s}} e_{\beta}
+L_s \frac{d i_{\alpha}}{dt} &= -R_s i_{\alpha} + v_{\alpha} - e_{\alpha},[4pt]
+L_s \frac{d i_{\beta}}{dt}  &= -R_s i_{\beta} + v_{\beta} - e_{\beta},
 \end{aligned}
-]
+$$
 
-where (e_{\alpha}, e_{\beta}) are the estimated back-EMFs.
+where (e_{\alpha}, e_{\beta}) are the back-EMF components (treated as disturbances).
 
-The rotor electrical angle (\theta_{e}) is obtained as:
+The **Sliding Mode Observer (SMO)** with adaptive disturbance compensation (ADO) is written:
 
-[
-\theta_{e} = \arctan\left(\frac{e_{\beta}}{e_{\alpha}}\right)
-]
+$$
+\begin{aligned}
+L_s \frac{d\hat{i}*{\alpha}}{dt} &= -R_s \hat{i}*{\alpha} + v_{\alpha} - \hat{e}*{\alpha} + g*{\alpha}(\tilde{i}*{\alpha}),[4pt]
+L_s \frac{d\hat{i}*{\beta}}{dt}  &= -R_s \hat{i}*{\beta}  + v*{\beta} - \hat{e}*{\beta}  + g*{\beta}(\tilde{i}_{\beta}),
+\end{aligned}
+$$
 
-The rotor speed (\omega_{e}) is derived by differentiating (\theta_{e}) and filtered for noise reduction.
-Adaptive gains in the observer compensate for system uncertainties, enhancing robustness compared to a conventional SMO.
+with estimation error (\tilde{i} = i - \hat{i}).
 
-![Speed & Angle Observer](Images/ADO_SMO.png)
+The back-EMFs in the stationary frame are related to rotor angle and speed:
+
+$$
+\begin{aligned}
+e_{\alpha} &= -\omega_e \Psi_m \sin(\theta_e),[4pt]
+e_{\beta}  &=  \omega_e \Psi_m \cos(\theta_e).
+\end{aligned}
+$$
+
+From estimated back-EMFs:
+
+$$
+\hat{\theta}*e = \operatorname{atan2}(\hat{e}*{\beta},,\hat{e}_{\alpha}),
+\qquad
+\hat{\omega}_e = \frac{d\hat{\theta}_e}{dt}\ \text{(filtered)}.
+$$
+
+The adaptive ADO terms improve robustness against parameter mismatch and load disturbance.
 
 ---
 
 ## Governing Equations
 
-The PMSM model is based on the following **d-q reference frame equations**:
+The PMSM model (d-q frame):
 
-* **Voltage Equations:**
+**Voltage equations**
 
-[
-V_{d} = R_{s}i_{d} + L_{d}\frac{di_{d}}{dt} - \omega L_{q} i_{q}
-]
+$$
+V_{d} = R_{s}i_{d} + L_{d}\tfrac{di_{d}}{dt} - \omega_e L_{q} i_{q},
+$$
 
-[
-V_{q} = R_{s}i_{q} + L_{q}\frac{di_{q}}{dt} + \omega L_{d} i_{d} + \omega \Psi_{m}
-]
+$$
+V_{q} = R_{s}i_{q} + L_{q}\tfrac{di_{q}}{dt} + \omega_e L_{d} i_{d} + \omega_e \Psi_{m}.
+$$
 
-* **Mechanical Equation:**
+**Mechanical equation**
 
-[
-T_{e} = J\frac{d\omega_{m}}{dt} + B\omega_{m} + T_{L}
-]
+$$
+T_{e} = J\tfrac{d\omega_{m}}{dt} + B\omega_{m} + T_{L}.
+$$
 
 ---
 
 ## Results
 
-The following plots illustrate the performance of the implemented scheme:
-
-* Motor speed tracking
-* Electromagnetic torque response
-* Flux linkage estimation
-* Stator currents under dynamic load conditions
+Simulation results validate the DTC-SVPWM with ADO-SMO observer.
 
 ![Results\_1a](Images/7b.png)
+*Figure 1: Motor speed response. The estimated speed closely tracks the reference speed step.*
+
 ![Results\_1b](Images/8b.png)
+*Figure 2: Electromagnetic torque waveform showing dynamic torque response under load change.*
+
 ![Results\_1c](Images/9b.png)
+*Figure 3: Stator flux magnitude estimation confirming stability and smooth flux trajectory.*
+
 ![Results\_2a](Images/10b.png)
+*Figure 4: Stator phase current waveforms under SVPWM switching — nearly sinusoidal with low ripple.*
+
 ![Results\_2b](Images/11b.png)
+*Figure 5: Speed estimation performance of ADO-SMO observer under transient conditions.*
+
 ![Results\_2c](Images/12b.png)
-
-These results confirm stable performance, accurate speed/position estimation by the **ADO-SMO**, and smooth torque response thanks to **SVPWM modulation**.
-
----
-
-## References
-
-1. Research papers on DTC-SVPWM and SMO-based sensorless control of PMSM.
-2. "Advanced Model Predictive Direct Torque Control with Space Vector PWM for Permanent Magnet Synchronous Motors."
-3. Standard textbooks on electrical machine control for background on Clarke/Park transformations.
-
----
-
-This guide provides a clear blueprint for implementing and understanding **SVPWM-DTC of PMSM with ADO-SMO observer** in Simulink.
+*Figure 6: Rotor position estimation by ADO-SMO, demonstrating accurate angle tracking without mechanical sensor.*
