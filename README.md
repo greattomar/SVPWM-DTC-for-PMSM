@@ -42,6 +42,8 @@ These blocks are the heart of the DTC scheme, providing the essential feedback v
 
 ![Torque Estimator](Images/03_torque_estimator.png)
 
+![Speed & angle Ovserver](Images/03_torque_estimator.png)
+
 ---
 
 ## Governing Equations
